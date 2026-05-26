@@ -1,16 +1,18 @@
-board = [
-    [0,0,0,0],
-    [0,2,0,0],
-    [0,2,4,0],
-    [0,0,0,0]
-]
-
 import random
 
 SIZE = 4
 
+weights = {
+    "empty": 2200,
+    "biggest": 3,
+    "smooth": 0.3,
+    "corner": 8,
+    "mono": 3
+}
+
 def create_board():
     return [[0 for _ in range(SIZE)] for _ in range(SIZE)]
+
 
 def add_random_tile(board):
     empty_cells = []
@@ -27,11 +29,13 @@ def add_random_tile(board):
     board[r][c] = 2 if random.random() < 0.9 else 4
     return board
 
+
 def print_board(board, score):
     print("Score:", score)
     for row in board:
         print(row)
     print()
+
 
 def move_row_left(row):
     new_row = [x for x in row if x != 0]
@@ -55,6 +59,7 @@ def move_row_left(row):
 
     return result, score
 
+
 def move_left(board):
     new_board = []
     total_score = 0
@@ -66,11 +71,14 @@ def move_left(board):
 
     return new_board, total_score
 
+
 def reverse_board(board):
     return [row[::-1] for row in board]
 
+
 def transpose(board):
     return [list(row) for row in zip(*board)]
+
 
 def move_right(board):
     reversed_board = reverse_board(board)
@@ -78,11 +86,13 @@ def move_right(board):
     final_board = reverse_board(moved_board)
     return final_board, score
 
+
 def move_up(board):
     transposed = transpose(board)
     moved_board, score = move_left(transposed)
     final_board = transpose(moved_board)
     return final_board, score
+
 
 def move_down(board):
     transposed = transpose(board)
@@ -90,21 +100,6 @@ def move_down(board):
     final_board = transpose(moved_board)
     return final_board, score
 
-def boards_equal(board1, board2):
-    return board1 == board2
-
-def can_move(board):
-    if any(0 in row for row in board):
-        return True
-
-    for move in [move_left, move_right, move_up, move_down]:
-        new_board, _ = move(board)
-        if new_board != board:
-            return True
-
-    return False
-
-import time
 
 moves = {
     "w": move_up,
@@ -112,14 +107,30 @@ moves = {
     "a": move_left,
     "d": move_right
 }
+
+
+def can_move(board):
+    if any(0 in row for row in board):
+        return True
+
+    for move_function in moves.values():
+        new_board, _ = move_function(board)
+        if new_board != board:
+            return True
+
+    return False
+
+
 def count_empty(board):
     count = 0
     for row in board:
         count += row.count(0)
     return count
 
+
 def max_tile(board):
     return max(max(row) for row in board)
+
 
 def smoothness(board):
     penalty = 0
@@ -141,29 +152,27 @@ def smoothness(board):
 def corner_bonus(board):
     biggest = max_tile(board)
 
-    corners = [
-        board[0][0],
-        board[0][3],
-        board[3][0],
-        board[3][3]
-    ]
-
-    if biggest in corners:
-        return biggest * 10
+    if board[0][0] == biggest:
+        return biggest * 20
 
     return 0
 
+def corner_locked_bonus(board):
+    biggest = max_tile(board)
+
+    if biggest in [board[0][0], board[0][3], board[3][0], board[3][3]]:
+        return biggest * 30
+
+    return 0
 
 def monotonicity(board):
     score = 0
 
-    # reward decreasing order from left to right
     for row in board:
         for i in range(SIZE - 1):
             if row[i] >= row[i + 1]:
                 score += row[i]
 
-    # reward decreasing order from top to bottom
     for c in range(SIZE):
         for r in range(SIZE - 1):
             if board[r][c] >= board[r + 1][c]:
@@ -171,22 +180,38 @@ def monotonicity(board):
 
     return score
 
-
-def evaluate(board):
+def evaluate(board, weights):
     empty = count_empty(board)
     biggest = max_tile(board)
 
-    return (
-        empty * 1000
-        + biggest * 2
-        + smoothness(board) * 0.1
-        + corner_bonus(board)
-        + monotonicity(board) * 1
+    smooth = smoothness(board)
+    corner = corner_bonus(board)
+    locked = corner_locked_bonus(board)
+    mono = monotonicity(board)
+
+    high_tile_bonus = 0
+
+    if biggest >= 1024:
+        high_tile_bonus += biggest * 50
+
+    if biggest >= 2048:
+        high_tile_bonus += biggest * 200
+
+    score = (
+        empty * weights["empty"]
+        + biggest * weights["biggest"]
+        + smooth * weights["smooth"]
+        + corner * weights["corner"]
+        + locked
+        + mono * weights["mono"]
+        + high_tile_bonus
     )
 
-def search_score(board, depth):
+    return score
+ 
+def search_score(board, depth, weights):
     if depth == 0 or not can_move(board):
-        return evaluate(board)
+        return evaluate(board, weights)
 
     best_score = -999999999
 
@@ -196,12 +221,68 @@ def search_score(board, depth):
         if new_board == board:
             continue
 
-        score = search_score(new_board, depth - 1)
+        score = gained + search_score(new_board, depth - 1, weights)
 
         if score > best_score:
             best_score = score
 
     return best_score
+
+
+def get_empty_cells(board):
+    cells = []
+
+    for r in range(SIZE):
+        for c in range(SIZE):
+            if board[r][c] == 0:
+                cells.append((r, c))
+
+    return cells
+
+
+def copy_board(board):
+    return [row[:] for row in board]
+
+
+def expectimax(board, depth, is_player_turn):
+    if depth == 0 or not can_move(board):
+        return evaluate(board, weights)
+
+    if is_player_turn:
+        best_score = -999999999
+
+        for key, move_function in moves.items():
+            new_board, gained = move_function(board)
+
+            if new_board == board:
+                continue
+
+            score = gained + expectimax(new_board, depth - 1, False)
+
+            if score > best_score:
+                best_score = score
+
+        return best_score
+
+    else:
+        empty_cells = get_empty_cells(board)
+
+        if not empty_cells:
+            return evaluate(board, weights)
+
+        total_score = 0
+
+        for r, c in empty_cells:
+            board_2 = copy_board(board)
+            board_2[r][c] = 2
+            total_score += 0.9 * expectimax(board_2, depth - 1, True)
+
+            board_4 = copy_board(board)
+            board_4[r][c] = 4
+            total_score += 0.1 * expectimax(board_4, depth - 1, True)
+
+        return total_score / len(empty_cells)
+
 
 def ai_move(board, depth=3):
     best_score = -999999999
@@ -213,7 +294,7 @@ def ai_move(board, depth=3):
         if new_board == board:
             continue
 
-        score = search_score(new_board, depth - 1)
+        score = gained + expectimax(new_board, depth - 1, False)
 
         if score > best_score:
             best_score = score
@@ -221,7 +302,17 @@ def ai_move(board, depth=3):
 
     return best_move
 
-def play_game(show=False):
+def choose_depth(board):
+    biggest = max_tile(board)
+
+    if biggest >= 1024:
+        return 5
+    elif biggest >= 512:
+        return 4
+    else:
+        return 3
+    
+def play_game(show=False, depth=4):
     board = create_board()
     add_random_tile(board)
     add_random_tile(board)
@@ -233,19 +324,14 @@ def play_game(show=False):
         if show:
             print_board(board, score)
 
-        command = ai_move(board, depth=4)
+        current_depth = choose_depth(board)
+
+        command = ai_move(board, depth=current_depth)
 
         if command is None:
             break
 
-        if command == "a":
-            new_board, gained = move_left(board)
-        elif command == "d":
-            new_board, gained = move_right(board)
-        elif command == "w":
-            new_board, gained = move_up(board)
-        elif command == "s":
-            new_board, gained = move_down(board)
+        new_board, gained = moves[command](board)
 
         if new_board != board:
             board = new_board
@@ -254,28 +340,46 @@ def play_game(show=False):
             add_random_tile(board)
 
     return score, max_tile(board), steps
-def run_experiments(n=100):
 
+
+def run_experiments(n=200, depth=4):
     scores = []
     max_tiles = []
     steps_list = []
+    tile_counts = {}
 
     for i in range(n):
-
-        score, tile, steps = play_game(show=False)
+        score, tile, steps = play_game(show=False, depth=depth)
 
         scores.append(score)
         max_tiles.append(tile)
         steps_list.append(steps)
 
-        print(f"Game {i+1}: Score={score}, MaxTile={tile}")
+        if tile not in tile_counts:
+            tile_counts[tile] = 0
+
+        tile_counts[tile] += 1
+
+        print(f"Game {i + 1}: Score={score}, MaxTile={tile}, Steps={steps}")
 
     print("\n===== RESULTS =====")
     print("Games:", n)
-    print("Average Score:", sum(scores)/n)
-    print("Best Score:", max(scores))
-    print("Average Max Tile:", sum(max_tiles)/n)
-    print("Best Max Tile:", max(max_tiles))
-    print("Average Steps:", sum(steps_list)/n)
+    print("Depth:", depth)
 
-run_experiments(100)
+    print("\nAverage Score:", sum(scores) / n)
+    print("Best Score:", max(scores))
+
+    print("\nAverage Max Tile:", sum(max_tiles) / n)
+    print("Best Max Tile:", max(max_tiles))
+
+    print("\nAverage Steps:", sum(steps_list) / n)
+
+    print("\n===== TILE DISTRIBUTION =====")
+
+    for tile in sorted(tile_counts.keys()):
+        count = tile_counts[tile]
+        percentage = (count / n) * 100
+        print(f"{tile}: {count} games ({percentage:.2f}%)")
+
+
+run_experiments(n=20, depth=4)

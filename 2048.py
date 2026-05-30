@@ -312,7 +312,7 @@ def choose_depth(board):
     else:
         return 3
     
-def play_game(show=False, depth=4):
+def play_game(show=False, depth=4, adaptive_depth=True):
     board = create_board()
     add_random_tile(board)
     add_random_tile(board)
@@ -324,7 +324,7 @@ def play_game(show=False, depth=4):
         if show:
             print_board(board, score)
 
-        current_depth = choose_depth(board)
+        current_depth = choose_depth(board) if adaptive_depth else depth
 
         command = ai_move(board, depth=current_depth)
 
@@ -342,14 +342,14 @@ def play_game(show=False, depth=4):
     return score, max_tile(board), steps
 
 
-def run_experiments(n=200, depth=4):
+def run_experiments(n=200, depth=4, adaptive_depth=True):
     scores = []
     max_tiles = []
     steps_list = []
     tile_counts = {}
 
     for i in range(n):
-        score, tile, steps = play_game(show=False, depth=depth)
+        score, tile, steps = play_game(show=False, depth=depth, adaptive_depth=adaptive_depth)
 
         scores.append(score)
         max_tiles.append(tile)
@@ -364,7 +364,7 @@ def run_experiments(n=200, depth=4):
 
     print("\n===== RESULTS =====")
     print("Games:", n)
-    print("Depth:", depth)
+    print("Depth:", "adaptive" if adaptive_depth else depth)
 
     print("\nAverage Score:", sum(scores) / n)
     print("Best Score:", max(scores))
@@ -382,4 +382,5 @@ def run_experiments(n=200, depth=4):
         print(f"{tile}: {count} games ({percentage:.2f}%)")
 
 
-run_experiments(n=20, depth=4)
+if __name__ == "__main__":
+    run_experiments(n=20, depth=4, adaptive_depth=True)

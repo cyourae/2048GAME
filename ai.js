@@ -4,11 +4,11 @@
   const SIZE = 4;
 
   const weights = {
-    empty: 2200,
-    biggest: 3,
-    smooth: 0.3,
-    corner: 8,
-    mono: 3,
+    empty: 4268.479371045358,
+    biggest: 18.010694236455443,
+    smooth: 0.39019808081028295,
+    corner: 21.201936789941232,
+    mono: 13.147122149705332,
   };
 
   const moveFns = {
